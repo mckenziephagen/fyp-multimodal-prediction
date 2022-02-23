@@ -22,7 +22,7 @@ library(dplyr, quietly=TRUE)
 library(broom) 
 # -
 
-rasero_data_path <- file.path('data', 'final_data_R1.hdf5')
+rasero_data_path <- file.path('..', 'data', 'final_data_R1.hdf5')
 features = H5Fopen(rasero_data_path)
 feature_names <- h5ls(features)['name']
 
@@ -61,7 +61,9 @@ colnames(cognition) <- c('CogTotalComp_Unadj',
 #to do: save into csvs maybe? 
 # -
 
-restricted_data <- read.csv('RESTRICTED_arokem_1_31_2022_23_26_45.csv')
+cog = 'CogTotalComp_Unadj' 
+
+restricted_data <- read.csv('../data/RESTRICTED_arokem_1_31_2022_23_26_45.csv')
 
 #cull restricted data to rasero subjects
 restricted_data <- restricted_data %>% filter(
@@ -146,6 +148,8 @@ for (pred in keys(predictors)) {
 } 
 # -
 
+
+
 RunSingleModel <- function(predictors, subjects, x_train_data, y_train_data) {
     for (pred in predictors) { 
         
@@ -157,10 +161,11 @@ RunSingleModel <- function(predictors, subjects, x_train_data, y_train_data) {
 
         train_prediction_df[pred] <- temp_predictions[['yhattrain']] 
 
-        models[pred] <-  append(models, temp_predictions['model'])
+        models[pred] <- append(models, temp_predictions['model']) 
+        print(models)
     }
     return(list("models" = models, "predictions" = train_prediction_df))
-    } 
+} 
 
 # +
 start_time <- Sys.time()
@@ -172,7 +177,23 @@ end_time <- Sys.time()
 start_time - end_time #total time
 # -
 
-single_models$models
+pred = 'volume' 
+
+temp_predictions <- RunSingleChannel(as.matrix(x_train_data[[pred]]), as.matrix(y_train_data))
+
+
+temp_predictions$model
+
+ models <- list()
+
+
+models['bleh'] <- temp_predictions['model']
+
+anotha_list <- list()
+
+list("models" = models, "bleh" = anotha_list)
+
+temp_predictions[['model']]
 
 # + tags=[]
 stacked_model <- RunStackedModel(as.matrix(train_prediction_df[train_index, -1]), cognition[train_index, cog])# summary(stacked_model) 
