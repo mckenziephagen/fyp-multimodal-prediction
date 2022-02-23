@@ -1,0 +1,192 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,Rmd,R:light
+#     text_representation:
+#       extension: .R
+#       format_name: light
+#       format_version: '1.5'
+#       jupytext_version: 1.13.1
+#   kernelspec:
+#     display_name: R
+#     language: R
+#     name: ir
+# ---
+
+# + tags=[]
+library(rhdf5, quietly=TRUE)
+library(glmnet, quietly=TRUE)
+library(caret, quietly=TRUE)
+library(hash, quietly=TRUE)
+library(dplyr, quietly=TRUE)
+library(broom) 
+# -
+
+rasero_data_path <- file.path('data', 'final_data_R1.hdf5')
+features = H5Fopen(rasero_data_path)
+feature_names <- h5ls(features)['name']
+
+# +
+predictors <- hash()
+
+subjects <- features$subjects
+
+cognition <- data.frame(t(features$YY_domain_cognition) )
+rownames(cognition) <- subjects
+
+predictors$connectome <- t(features$connectome_features) 
+predictors$volume <- t(features$sub_vols_features)
+predictors$local_connectome <- t(features$loc_conn_features)
+predictors$surface <- t(features$surface_features)
+predictors$thickness <- t(features$thickness_features)
+
+
+H5close()
+
+# +
+#add some labels
+for (i in keys(predictors)) {
+    rownames(predictors[[i]]) <- subjects
+}
+
+rownames(cognition) <- subjects
+colnames(cognition) <- c('CogTotalComp_Unadj', 
+                        'CogFluidComp_Unadj', 
+                        'CogCrystalComp_Unadj', 
+                        'SCPT_SEN', 
+                        'DDisc_AUC_200', 
+                        'IWRD_TOT', 
+                        'VSPLOT_TC')
+
+#to do: save into csvs maybe? 
+# -
+
+restricted_data <- read.csv('RESTRICTED_arokem_1_31_2022_23_26_45.csv')
+
+#cull restricted data to rasero subjects
+restricted_data <- restricted_data %>% filter(
+  Subject %in% subjects
+  )
+dim(restricted_data)
+
+CreateIndices <- function(folds, num_curr_fold) { 
+    
+    index <- (1: length(subjects))
+    train_index <- folds[[num_curr_fold]]
+    test_index <- index[!(index %in% train_index)] 
+    
+   return(list("train_index" = train_index, "test_index" = test_index))
+}
+
+SplitYData <- function(cog, train_index, test_index) { 
+        
+
+    y_train <- cognition[train_index,][cog]
+    
+    
+    y_test <- cognition[test_index,][cog]
+
+    return(list("y_train" = y_train, 
+                "y_test" = y_test))
+}
+
+SplitXData <- function(pred, train_index, test_index) { 
+        
+    x_train <- predictors[[pred]][train_index,] 
+    x_test <- predictors[[pred]][test_index,]
+    
+    return(list("x_train" = x_train,  
+               "x_test" = x_test))
+}
+
+RunSingleChannel <- function(x_train, y_train) { 
+    
+    cv_fit <- cv.glmnet(x_train, y_train)  
+    y_hat_train <- predict(cv_fit, newx=x_train, s='lambda.1se', type = 'link') #same training data, but we cv above
+    
+   return(list("yhattrain" = y_hat_train, "model" = cv_fit))
+}
+
+CalcRsq <- function(y_hat, y_train) {
+
+    y_mean <- mean(y_train[[1]])
+
+    sse <- sum((y_train - y_hat)^2)
+    ssr <- sum((y_hat - y_mean)^2) 
+    sst <- sum((y_train - y_mean)^2)  
+    return(1 - (sse / sst)) 
+}
+
+#compare lm and lasso 
+RunStackedModel <- function(y_hat_train, y_train) { 
+   stacked_model <- cv.glmnet(y_hat_train, y_train) #right now just lm, later use lasso
+}
+
+folds <- groupKFold(restricted_data$Family_ID, k=5) #write test for this
+fold_num = 1
+
+# +
+indices <- CreateIndices(folds, num_curr_fold=fold_num)
+
+train_index <- indices$train_index
+test_index <- indices$test_index 
+
+split_y_data <- SplitYData(cog, train_index, test_index)
+
+y_train_data <- split_y_data$'y_train'
+y_test_data <- split_y_data$'y_test'
+
+x_train_data <- list()
+x_test_data <- list()
+for (pred in keys(predictors)) { 
+    
+    split_x_data <- SplitXData(pred, train_index, test_index)
+    x_train_data[[pred]] <- split_x_data$'x_train'
+    x_test_data[[pred]] <- split_x_data$'x_test'
+} 
+# -
+
+RunSingleModel <- function(predictors, subjects, x_train_data, y_train_data) {
+    for (pred in predictors) { 
+        
+        models <- list()
+        
+        train_prediction_df <- data.frame('subjects' = subjects[train_index])    
+
+        temp_predictions <- RunSingleChannel(as.matrix(x_train_data[[pred]]), as.matrix(y_train_data))
+
+        train_prediction_df[pred] <- temp_predictions[['yhattrain']] 
+
+        models[pred] <-  append(models, temp_predictions['model'])
+    }
+    return(list("models" = models, "predictions" = train_prediction_df))
+    } 
+
+# +
+start_time <- Sys.time()
+
+single_models <- RunSingleModel(keys(predictors), subjects, x_train_data, y_train_data) 
+
+end_time <- Sys.time()
+
+start_time - end_time #total time
+# -
+
+single_models$models
+
+# + tags=[]
+stacked_model <- RunStackedModel(as.matrix(train_prediction_df[train_index, -1]), cognition[train_index, cog])# summary(stacked_model) 
+
+# +
+test_prediction_df <- data.frame('subjects' = subjects[test_index]) 
+for (pred in keys(predictors)) { 
+    curr_model <- single_models[pred]
+    temp_y_predict <- predict(curr_model, newx=test_data[[pred]]) 
+    test_prediction_df[pred] <- temp_y_predict 
+    } 
+
+final_yhat <- predict(stacked_model, newx=as.matrix(test_prediction_df[,-1]), 
+                      newy=split_y_data[['y_test']][[cog]], s='lambda.1se', type = 'link')
+# -
+
+CalcRsq(final_yhat, split_y_data[['y_test']][[cog]])
