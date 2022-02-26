@@ -20,19 +20,22 @@ library(caret, quietly=TRUE)
 library(hash, quietly=TRUE)
 library(dplyr, quietly=TRUE)
 library(broom) 
+library(assertthat)
 # -
+
+subject_subset = NULL
 
 rasero_data_path <- file.path('..', 'data', 'final_data_R1.hdf5')
 features = H5Fopen(rasero_data_path)
 feature_names <- h5ls(features)['name']
+rasero_subjects <- features$subjects
 
 # +
 predictors <- hash()
 
-subjects <- features$subjects
 
 cognition <- data.frame(t(features$YY_domain_cognition) )
-rownames(cognition) <- subjects
+
 
 predictors$connectome <- t(features$connectome_features) 
 predictors$volume <- t(features$sub_vols_features)
@@ -44,12 +47,8 @@ predictors$thickness <- t(features$thickness_features)
 H5close()
 
 # +
-#add some labels
-for (i in keys(predictors)) {
-    rownames(predictors[[i]]) <- subjects
-}
+rownames(cognition) <- rasero_subjects
 
-rownames(cognition) <- subjects
 colnames(cognition) <- c('CogTotalComp_Unadj', 
                         'CogFluidComp_Unadj', 
                         'CogCrystalComp_Unadj', 
@@ -58,18 +57,52 @@ colnames(cognition) <- c('CogTotalComp_Unadj',
                         'IWRD_TOT', 
                         'VSPLOT_TC')
 
+for (i in keys(predictors)) {
+    rownames(predictors[[i]]) <- rasero_subjects
+}
+
 #to do: save into csvs maybe? 
 # -
 
 cog = 'CogTotalComp_Unadj' 
 
-restricted_data <- read.csv('../data/RESTRICTED_arokem_1_31_2022_23_26_45.csv')
+unrestricted_data <- read.csv('../data/unrestricted_mphagen_1_27_2022_20_50_7.csv')
+rownames(unrestricted_data) <- unrestricted_data$Subject
 
-#cull restricted data to rasero subjects
+
+#check to make sure that my download of the hcp data == rasero's 
+stopifnot(identical(subset(unrestricted_data, Subject %in% rasero_subjects)[[cog]], cognition[[cog]]))
+
+subject_subset = 'Q2'
+
+# +
+if (subject_subset == 'Q2') { 
+    q2 <- c(subset(unrestricted_data, 
+                        (Release == 'Q2' | Release == 'Q1') 
+                        & ('3T_Full_MR_Compl' = TRUE))$'Subject')
+    subjects <- intersect(subjects, q2)     
+} else {
+    subjects = rasero_subjects } 
+
+ 
+#cull data to specific subset of subjects 
 restricted_data <- restricted_data %>% filter(
   Subject %in% subjects
   )
-dim(restricted_data)
+
+
+# -
+
+if (length(subjects) != dim(cognition)[1]) {
+cognition <- subset(cognition, rownames(cognition) %in% subjects)
+    
+    for (i in keys(predictors)) {
+        print(i)
+        print(typeof(i))
+        predictors[[i]] <- subset(predictors[[i]], rownames(predictors[[i]]) %in% subjects)
+        }
+}
+
 
 CreateIndices <- function(folds, num_curr_fold) { 
     
@@ -148,21 +181,22 @@ for (pred in keys(predictors)) {
 } 
 # -
 
-
-
 RunSingleModel <- function(predictors, subjects, x_train_data, y_train_data) {
+    
+    models <- list()
+    train_prediction_df <- data.frame(row.names=rownames(y_train_data)   )
+
     for (pred in predictors) { 
         
-        models <- list()
-        
-        train_prediction_df <- data.frame('subjects' = subjects[train_index])    
+        print(pred)
 
         temp_predictions <- RunSingleChannel(as.matrix(x_train_data[[pred]]), as.matrix(y_train_data))
 
         train_prediction_df[pred] <- temp_predictions[['yhattrain']] 
 
-        models[pred] <- append(models, temp_predictions['model']) 
-        print(models)
+        models[pred] <-  temp_predictions['model'] 
+        
+        
     }
     return(list("models" = models, "predictions" = train_prediction_df))
 } 
@@ -177,26 +211,13 @@ end_time <- Sys.time()
 start_time - end_time #total time
 # -
 
-pred = 'volume' 
-
-temp_predictions <- RunSingleChannel(as.matrix(x_train_data[[pred]]), as.matrix(y_train_data))
-
-
-temp_predictions$model
-
- models <- list()
-
-
-models['bleh'] <- temp_predictions['model']
-
-anotha_list <- list()
-
-list("models" = models, "bleh" = anotha_list)
-
-temp_predictions[['model']]
+dim(as.matrix(single_models$predictions))
 
 # + tags=[]
-stacked_model <- RunStackedModel(as.matrix(train_prediction_df[train_index, -1]), cognition[train_index, cog])# summary(stacked_model) 
+stacked_model <- RunStackedModel(as.matrix(single_models$predictions), cognition[train_index, cog])# summary(stacked_model) 
+# -
+
+stacked_model
 
 # +
 test_prediction_df <- data.frame('subjects' = subjects[test_index]) 
