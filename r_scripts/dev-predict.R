@@ -154,7 +154,9 @@ CalcRsq <- function(y_hat, y_train) {
 
 #compare lm and lasso 
 RunStackedModel <- function(y_hat_train, y_train) { 
-   stacked_model <- cv.glmnet(y_hat_train, y_train) #right now just lm, later use lasso
+   stacked_model <- cv.glmnet(y_hat_train, y_train)
+   temp_predictions <- predict(stacked_model, newx=y_hat_train) #in sample cv prediction
+   return(list("model" = stacked_model, "predictions" = temp_predictions))
 }
 
 folds <- groupKFold(restricted_data$Family_ID, k=5) #write test for this
@@ -209,25 +211,19 @@ single_models <- RunSingleModel(keys(predictors), subjects, x_train_data, y_trai
 end_time <- Sys.time()
 
 start_time - end_time #total time
-# -
-
-dim(as.matrix(single_models$predictions))
 
 # + tags=[]
 stacked_model <- RunStackedModel(as.matrix(single_models$predictions), cognition[train_index, cog])# summary(stacked_model) 
-# -
-
-stacked_model
 
 # +
-test_prediction_df <- data.frame('subjects' = subjects[test_index]) 
+test_prediction_df <- data.frame(row.names=subjects[test_index]) 
 for (pred in keys(predictors)) { 
-    curr_model <- single_models[pred]
-    temp_y_predict <- predict(curr_model, newx=test_data[[pred]]) 
+    curr_model <- single_models$models[pred]
+    temp_y_predict <- predict(curr_model, newx=x_test_data[[pred]]) 
     test_prediction_df[pred] <- temp_y_predict 
     } 
 
-final_yhat <- predict(stacked_model, newx=as.matrix(test_prediction_df[,-1]), 
+final_yhat <- predict(stacked_model$model, newx=as.matrix(test_prediction_df), 
                       newy=split_y_data[['y_test']][[cog]], s='lambda.1se', type = 'link')
 # -
 
