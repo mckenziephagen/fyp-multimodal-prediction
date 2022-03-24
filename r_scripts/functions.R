@@ -40,6 +40,7 @@ RunStackedModel <- function(y_hat_train, y_train) {
    stacked_model <- cv.glmnet(y_hat_train, y_train)
    predictions <- predict(stacked_model, newx=y_hat_train, s='lambda.1se') 
    rsq <- CalcRsq(predictions, y_train) 
+    
    return(list("model" = stacked_model, "predictions" = predictions, "rsq" = rsq))
 }
 

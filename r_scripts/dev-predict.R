@@ -1,11 +1,11 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,Rmd,R:light
+#     formats: ipynb,R:percent
 #     text_representation:
 #       extension: .R
-#       format_name: light
-#       format_version: '1.5'
+#       format_name: percent
+#       format_version: '1.3'
 #       jupytext_version: 1.13.1
 #   kernelspec:
 #     display_name: R
@@ -13,7 +13,7 @@
 #     name: ir
 # ---
 
-# + tags=[]
+# %% tags=[]
 library(rhdf5, quietly=TRUE)
 library(glmnet, quietly=TRUE)
 library(caret, quietly=TRUE)
@@ -22,25 +22,25 @@ library(dplyr, quietly=TRUE)
 library(broom) 
 library(assertthat)
 library(R.utils)
-# -
 
+# %%
 source('functions.R')
 
-# +
+# %%
 default_args = list(subject_subset='Q2', cognitive_measure='CogTotalComp_Unadj', num_its=1) 
 
 args <- commandArgs(defaults=default_args, asValues=TRUE)
 subject_subset <- args$subject_subset
 cog <- args$cognitive_measure
 num_its <- args$num_its
-# -
 
+# %%
 rasero_data_path <- file.path('..', 'data', 'final_data_R1.hdf5')
 features = H5Fopen(rasero_data_path)
 feature_names <- h5ls(features)['name']
 rasero_subjects <- features$subjects
 
-# +
+# %%
 predictors <- hash()
 
 cognition <- data.frame(t(features$YY_domain_cognition) )
@@ -53,7 +53,7 @@ predictors$thickness <- t(features$thickness_features)
 
 H5close()
 
-# +
+# %%
 rownames(cognition) <- rasero_subjects
 
 colnames(cognition) <- c('CogTotalComp_Unadj', 
@@ -69,22 +69,24 @@ for (i in keys(predictors)) {
 }
 
 pred_list <- keys(predictors)
-# -
 
+# %%
 #reproducible things
 git_hash = system("git rev-parse HEAD", intern=TRUE)
-set.seed(Sys.time())
-curr_seed <- .Random.seed
+time_seed <- Sys.time()
+curr_seed <- set.seed(time_seed)
 
+# %%
 unrestricted_data <- read.csv('../data/unrestricted_mphagen_1_27_2022_20_50_7.csv')
 rownames(unrestricted_data) <- unrestricted_data$Subject
 restricted_data <- read.csv('../data/RESTRICTED_arokem_1_31_2022_23_26_45.csv')
 
 
+# %%
 #check to make sure that my download of the hcp data == rasero's 
 stopifnot(identical(subset(unrestricted_data, Subject %in% rasero_subjects)[[cog]], cognition[[cog]]))
 
-# +
+# %%
 if (subject_subset == 'Q2') { 
     q2 <- c(subset(unrestricted_data, 
                         (Release == 'Q2' | Release == 'Q1') 
@@ -98,8 +100,8 @@ if (subject_subset == 'Q2') {
 restricted_data <- restricted_data %>% filter(
   Subject %in% subjects
   )
-# -
 
+# %%
 if (length(subjects) != dim(cognition)[1]) {
 cognition <- subset(cognition, rownames(cognition) %in% subjects)
     for (i in pred_list) {
@@ -108,58 +110,68 @@ cognition <- subset(cognition, rownames(cognition) %in% subjects)
 }
 
 
-# + tags=[]
-for (it in num_its) { 
-    folds <- groupKFold(restricted_data$Family_ID, k=5) #write test for this
-    test_prediction_df <- data.frame(row.names=subjects) 
-    final_yhat_df <- data.frame(row.names=subjects) 
+# %%
+it_dir_name <- paste('iteration', num_its, sep='_')
 
-    for (num_fold in 1:length(folds)) {    
-        indices <- CreateIndices(folds, num_curr_fold=num_fold) #fix here 
+# %%
+result_path <- file.path('../results', git_hash, subject_subset, cog, it_dir_name)
+dir.create(result_path,recursive = TRUE)
 
-        train_index <- indices$train_index
-        test_index <- indices$test_index 
+# %%
+single_rsq_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
+colnames(single_rsq_df) <- pred_list
+stacked_rsq_df <- data.frame(matrix(ncol = 2, nrow=0))
 
-        split_y_data <- SplitYData(cog, train_index, test_index)
 
-        y_train_data <- split_y_data$'y_train'
-        y_test_data <- split_y_data$'y_test'
+# %%
+colnames(stacked_rsq_df) <- c('stacked', 'full')
 
-        x_train_data <- list()
-        x_test_data <- list()
+# %% tags=[]
+folds <- groupKFold(restricted_data$Family_ID, k=5) #write test for this
+test_prediction_df <- data.frame(row.names=subjects) 
+final_yhat_df <- data.frame(row.names=subjects) 
 
-        for (pred in pred_list) { 
+for (num_fold in 1:length(folds)) {    
+    indices <- CreateIndices(folds, num_curr_fold=num_fold) #fix here 
 
-            split_x_data <- SplitXData(pred, train_index, test_index)
-            x_train_data[[pred]] <- split_x_data$'x_train'
-            x_test_data[[pred]] <- split_x_data$'x_test'
-        } 
+    train_index <- indices$train_index
+    test_index <- indices$test_index 
 
-        start_time <- Sys.time()
+    split_y_data <- SplitYData(cog, train_index, test_index)
 
-        single_models <- RunSingleModels(pred_list, x_train_data, y_train_data)
+    y_train_data <- split_y_data$'y_train'
+    y_test_data <- split_y_data$'y_test'
 
-        stacked_model <- RunStackedModel(as.matrix(single_models$predictions), cognition[train_index, cog])# summary(stacked_model) 
+    x_train_data <- list()
+    x_test_data <- list()
 
-        end_time <- Sys.time()
-        start_time - end_time #total time
+    for (pred in pred_list) { 
 
-        #things that are saved to csv/rdta files 
-        
-        for (pred in pred_list) { 
-            curr_model <- single_models$models[pred]
-            test_prediction_df[test_index, pred] <- predict(curr_model, newx=x_test_data[[pred]], s='lambda.1se')  
-        } 
-
-        final_yhat_df[test_index,'predictions'] <- predict(stacked_model$model, newx=as.matrix(test_prediction_df[test_index,]), 
-                           s='lambda.1se', type = 'link') #double check why newy was in here
-
+        split_x_data <- SplitXData(pred, train_index, test_index)
+        x_train_data[[pred]] <- split_x_data$'x_train'
+        x_test_data[[pred]] <- split_x_data$'x_test'
     } 
-        #use final yhat to calc r2, save out final yhat 
-}
 
-# -
+    start_time <- Sys.time()
 
-single_models$rsq
+    single_models <- RunSingleModels(pred_list, x_train_data, y_train_data)
+    single_rsq_df <- rbind(single_rsq_df, single_models$rsq)
+    
+    stacked_model <- RunStackedModel(as.matrix(single_models$predictions), cognition[train_index, cog])
+    
+    #turn into function
+     for (pred in pred_list) { 
+         curr_model <- single_models$models[pred]
+         test_prediction_df[test_index, pred] <- predict(curr_model, newx=x_test_data[[pred]], s='lambda.1se')  
+     } 
 
+     final_yhat_df[test_index,'predictions'] <- predict(stacked_model$model, newx=as.matrix(test_prediction_df[test_index,]), 
+                        s='lambda.1se', type = 'link') #double check why newy was in here
+    
+    rds_name <- file.path(result_path, paste('fold', num_fold, '.RDS', sep=''))
+    save(single_models, stacked_model, file = rds_name)
+} 
 
+full_rsq <- CalcRsq(final_yhat_df[['predictions']], cognition[[cog]])
+write.csv(single_rsq_df, file = file.path(result_path, paste('single_rsq_dfs', '.csv', sep='')))
+write.csv(stacked_rsq_df, file = file.path(result_path, paste('stacked_rsq_dfs', '.csv', sep='')))
