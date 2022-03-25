@@ -8,7 +8,7 @@ CreateIndices <- function(folds, num_curr_fold) { #passing folds and num_curr_fo
 }
 
 
-SplitYData <- function(cog, train_index, test_index) { 
+SplitYData <- function(cog, train_index, test_index, cognition) { 
     
     y_train <- cognition[train_index,][cog]
     y_test <- cognition[test_index,][cog]
