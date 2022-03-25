@@ -6,10 +6,12 @@
 #SBATCH -p normal
 #SBATCH -c 1
 #SBATCH --mem=8GB
-#SBATCH --array 1-100
+#SBATCH --export=NONE
 
-conda activate r-env
+PATH="$HOME/miniconda3/bin:$PATH"
 
-Rscript dev-predict.R --num_its SLURM_ARRAY_JOB_ID --cognitive_measure {COG_MEASURE}
+conda activate r_env
+
+Rscript dev-predict.R --num_it ${SLURM_ARRAY_TASK_ID} --cognitive_measure {COG_MEASURE} 
 
 
