@@ -1,4 +1,6 @@
+renv/*
 junk
 *RESTRICTED*
 *.ipynb
 *.ipynb*
+results/*

@@ -8,19 +8,21 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.13.7
 #   kernelspec:
-#     display_name: R
+#     display_name: R [conda env:test-R]
 #     language: R
-#     name: ir
+#     name: conda-env-test-R-r
 # ---
 
+# %%
+source('.Rprofile')
+
 # %% tags=[]
-library(rhdf5, quietly=TRUE) #https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html
+library(rhdf5 , quietly=TRUE) #https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html
 library(glmnet, quietly=TRUE)
 library(caret, quietly=TRUE)
 library(hash, quietly=TRUE)
 library(dplyr, quietly=TRUE)
 library(broom) 
-library(assertthat)
 library(R.utils)
 
 # %%
