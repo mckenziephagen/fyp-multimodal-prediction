@@ -1,8 +1,12 @@
 name: jupyter-env
 channels:
-  - defaults
+  - conda-forge
 dependencies:
   - jupyterlab
   - nb_conda_kernels
   - r-irkernel
-prefix: /Users/kenziepaige/anaconda3/envs/jupyter-env
+  - r-renv
+  - r-base=4.0.2
+  - jupytext
+prefix: /home/usuers/mphagen/miniconda3/envs/jupyter-env
+

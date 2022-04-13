@@ -1,7 +1,10 @@
-name: anoth-R
+name: r-env
 channels:
   - defaults
+  - conda-forge
 dependencies:
   - r-base=4.1.0
   - r-irkernel
-prefix: /Users/kenziepaige/anaconda3/envs/anoth-R
+  - r-renv
+prefix: /home/users/mphagen/miniconda3/envs/r-env
+
