@@ -1,3 +1,38 @@
+LoadData <- function(data_path) { 
+    data = H5Fopen(rasero_data_path)
+    data_names <- h5ls(data)['name']
+    subjects <- data$subjects
+    
+    predictors <- list()
+
+    outcomes <- data.frame(t(data$YY_domain_cognition) )
+    
+    predictors$connectome <- t(data$connectome_features) 
+    predictors$volume <- t(data$sub_vols_features)
+    predictors$local_connectome <- t(data$loc_conn_features)
+    predictors$surface <- t(data$surface_features)
+    predictors$thickness <- t(data$thickness_features)
+
+    H5close()
+    
+    rownames(outcomes) <- subjects
+
+    colnames(outcomes) <- c('CogTotalComp_Unadj', 
+                        'CogFluidComp_Unadj', 
+                        'CogCrystalComp_Unadj', 
+                        'SCPT_SEN', 
+                        'DDisc_AUC_200', 
+                        'IWRD_TOT', 
+                        'VSPLOT_TC')
+
+    pred_list <- names(predictors)
+    for (i in names(predictors)) {
+        rownames(predictors[[i]]) <- subjects
+}
+    
+    return(list("predictors" = predictors, "outcomes" = outcomes, "subjects" = subjects))
+} 
+
 CreateIndices <- function(folds, num_curr_fold) { #passing folds and num_curr_fold is redundant but oh well. 
     
     index <- (1: length(subjects))
@@ -35,10 +70,9 @@ RunSingleModels <- function(predictors, x_train_data, y_train_data) {
                 "train" = rownames(x_train_data[[pred]]), "rsq" = rsq_list))
 } 
 
-RunStackedModel <- function(y_hat_train, y_train) { 
-    
-   stacked_model <- cv.glmnet(y_hat_train, y_train)
-   predictions <- predict(stacked_model, newx=y_hat_train, s='lambda.1se') 
+RunStackedModel <- function(y_hat_train, y_train) {  
+   stacked_model <- lm(y_train ~ y_hat_train)
+   predictions <- predict(stacked_model, newdata=data.frame(y_hat_train)) 
    rsq <- CalcRsq(predictions, y_train) 
     
    return(list("model" = stacked_model, "predictions" = predictions, "rsq" = rsq))
