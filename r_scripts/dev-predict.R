@@ -32,7 +32,7 @@ source('functions.R')
 # %%
 default_args = list(subject_subset='Q2', cognitive_measure= 'CogTotalComp_Unadj', 
                     num_it=1, output_dir='/scratch/users/mphagen', 
-                    lambda='lambda.1se', num_k = 10, stacked = FALSE) 
+                    lambda='lambda.1se', num_k = 20, stacked = FALSE) 
 
 args <- R.utils::commandArgs(defaults=default_args, asValues=TRUE)
 subject_subset <- args$subject_subset
@@ -58,6 +58,9 @@ subjects <- temp_data$subjects
 pred_list <- names(predictors)
 
 # %%
+cognition <- cbind(cognition, unrestricted_data[subjects, 'PMAT24_A_CR'])
+
+# %%
 unrestricted_data <- read.csv('../data/unrestricted_mphagen_1_27_2022_20_50_7.csv')
 rownames(unrestricted_data) <- unrestricted_data$Subject
 restricted_data <- read.csv('../data/RESTRICTED_arokem_1_31_2022_23_26_45.csv')
@@ -79,7 +82,7 @@ if (subject_subset == 'Q2') {
     subjects <- intersect(subjects, q2) #find intersection for qc 
     pred_list = 'connectome'
 } else {
-    subjects <- subjects 
+    subjects <- subjects #so I don't forget
     pred_list <- names(predictors)} 
  
 #cull data to specific subset of subjects 
@@ -99,7 +102,8 @@ for (i in pred_list) {
 
 # %%
 it_dir_name <- paste('iteration', num_it, sep='_')
-result_path <- file.path(output_dir, 'fyp_results', git_hash, subject_subset, cog, it_dir_name)
+k_dir_name <- paste('k', num_k, sep='_')
+result_path <- file.path(output_dir, 'fyp_results', git_hash, subject_subset, num_k, cog, it_dir_name)
 dir.create(result_path,recursive = TRUE)
 
 # %%
@@ -173,13 +177,13 @@ for (num_fold in 1:length(folds)) {
      oos_single_rsq_df <- rbind(oos_single_rsq_df, oos_single_rsq)
      oos_correlation_df <- rbind(oos_correlation_df, oos_correlation)
     
-    #save lambdas 
-    print('running stacked models')
-     
+    #save lambdas      
     stacked_model = NULL
 
     if (stacked != FALSE) { 
          
+        print('running stacked models')
+
         stacked_model <- RunStackedModel(as.matrix(single_models$predictions), 
                                      cognition[train_index, cog])
         stacked_rsq_df <- rbind(stacked_rsq_df, stacked_model$rsq)
@@ -211,3 +215,8 @@ write.csv(oos_single_rsq_df,
 
 write.csv(oos_correlation_df, 
           file = file.path(result_path, 'out_of_sample_correlation.csv'))
+
+# %%
+oos_correlation_df
+
+# %%
