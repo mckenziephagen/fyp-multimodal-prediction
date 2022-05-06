@@ -8,5 +8,5 @@ dependencies:
   - r-renv
   - r-base=4.0.2
   - jupytext
-prefix: /home/usuers/mphagen/miniconda3/envs/jupyter-env
+prefix: /home/users/mphagen/miniconda3/envs/jupyter-env
 
