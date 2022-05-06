@@ -13,8 +13,11 @@
 #     name: conda-env-r-env-r
 # ---
 
+# %%
+setwd('/home/groups/jyeatman/MPH_code/fyp-multimodal-prediction/r_scripts')
+
 # %% tags=[]
-source('.Rprofile') #I don't think slurm scripts source the right .rprofile
+source('.Rprofile')
 
 library(rhdf5) #https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html
 library(glmnet, quietly=TRUE)
@@ -232,5 +235,3 @@ write.csv(single_rsq_df,
 
 write.csv(single_correlation_df, 
           file = file.path(result_path, 'correlation.csv'))
-
-# %%
