@@ -70,12 +70,13 @@ RunSingleModels <- function(predictors, x_train_data, y_train_data) {
                 "train" = rownames(x_train_data[[pred]]), "rsq" = rsq_list))
 } 
 
-RunStackedModel <- function(y_hat_train, y_train) {  
-   stacked_model <- lm(y_train ~ y_hat_train)
-   predictions <- predict(stacked_model, newdata=data.frame(y_hat_train)) 
-   rsq <- CalcRsq(predictions, y_train) 
+RunStackedModel <- function(y_hat_train, y_train) { 
+   stacked_df <- cbind(data.frame(y_hat_train), cog = y_train) 
+   stacked_model <- lm(cog ~ ., data = stacked_df)
+   #predictions <- predict(stacked_model, newdata=data.frame(y_hat_train)) 
+   #rsq <- CalcRsq(predictions, y_train) 
     
-   return(list("model" = stacked_model, "predictions" = predictions, "rsq" = rsq))
+   return(list("model" = stacked_model))
 }
 
 CalcRsq <- function(y_hat, y_actual) { #write test 

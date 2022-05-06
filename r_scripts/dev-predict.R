@@ -6,7 +6,7 @@
 #       extension: .R
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.7
+#       jupytext_version: 1.13.8
 #   kernelspec:
 #     display_name: R [conda env:r-env]
 #     language: R
@@ -14,9 +14,7 @@
 # ---
 
 # %% tags=[]
-setwd('/home/users/mphagen/fyp-multimodal-prediction/r_scripts')
-
-source('.Rprofile')
+source('.Rprofile') #I don't think slurm scripts source the right .rprofile
 
 library(rhdf5) #https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html
 library(glmnet, quietly=TRUE)
@@ -32,7 +30,8 @@ source('functions.R')
 # %%
 default_args = list(subject_subset='Q2', cognitive_measure= 'CogTotalComp_Unadj', 
                     num_it=1, output_dir='/scratch/users/mphagen', 
-                    lambda='lambda.1se', num_k = 20, stacked = FALSE) 
+                    lambda='lambda.1se', num_k = 5, stacked = TRUE, 
+                    pred_group = 'rasero') 
 
 args <- R.utils::commandArgs(defaults=default_args, asValues=TRUE)
 subject_subset <- args$subject_subset
@@ -42,32 +41,32 @@ lambda <- args$lambda
 output_dir <- args$output_dir
 num_k <- args$num_k
 stacked <- args$stacked
+pred_group <- args$pred_group
 h5disableFileLocking()
 
 
 # %%
-data_dir <- ('/home/users/mphagen/fyp-multimodal-prediction/data')
+data_dir <- file.path( '../data')
 
 # %%
-rasero_data_path <- file.path(data_dir, 'final_data_R1.hdf5')
-temp_data <- LoadData(rasero_data_path)
-predictors <- temp_data$predictors
-cognition <- temp_data$outcomes
-subjects <- temp_data$subjects
+if (pred_group == 'rasero') { 
+    rasero_data_path <- file.path(data_dir, 'final_data_R1.hdf5')
+    temp_data <- LoadData(rasero_data_path)
+    predictors <- temp_data$predictors
+    cognition <- temp_data$outcomes
+    subjects <- temp_data$subjects
+    
+} else if (pred_group == 'finn') { 
+    rasero_data_path <- file.path(data_dir, 'final_data_R1.hdf5')
+    temp_data <- LoadData(rasero_data_path)
+
+    predictors <- temp_data$predictors['connectome']
+    #add in pos and neg connectomes later
+    } 
 
 pred_list <- names(predictors)
 
 # %%
-cognition <- cbind(cognition, unrestricted_data[subjects, 'PMAT24_A_CR'])
-
-# %%
-unrestricted_data <- read.csv('../data/unrestricted_mphagen_1_27_2022_20_50_7.csv')
-rownames(unrestricted_data) <- unrestricted_data$Subject
-restricted_data <- read.csv('../data/RESTRICTED_arokem_1_31_2022_23_26_45.csv')
-
-
-# %%
-#reproducible things
 git_hash = system("git rev-parse HEAD", intern=TRUE)
 
 # %%
@@ -75,66 +74,82 @@ git_hash = system("git rev-parse HEAD", intern=TRUE)
 #stopifnot(identical(subset(unrestricted_data, Subject %in% rasero_subjects)[[cog]], cognition[[cog]]))
 
 # %%
-if (subject_subset == 'Q2') { 
-    q2 <- c(subset(unrestricted_data, 
-                        (Release == 'Q2' | Release == 'Q1') 
-                        & ('3T_Full_MR_Compl' = TRUE))$'Subject')
-    subjects <- intersect(subjects, q2) #find intersection for qc 
-    pred_list = 'connectome'
-} else {
-    subjects <- subjects #so I don't forget
-    pred_list <- names(predictors)} 
- 
-#cull data to specific subset of subjects 
-restricted_data <- restricted_data %>% filter(
-  Subject %in% subjects
-  )
+unrestricted_data <- read.csv('../data/unrestricted_mphagen_1_27_2022_20_50_7.csv')
+rownames(unrestricted_data) <- unrestricted_data$subjects
+
+
+restricted_data <- read.csv('../data/RESTRICTED_arokem_1_31_2022_23_26_45.csv')
+rownames(restricted_data) <- restricted_data$subjects
+
+
 
 # %%
-#subset cognition to subjects present 
+#cull down subjects
 
-if (length(subjects) != dim(cognition)[1]) {
-cognition <- subset(cognition, rownames(cognition) %in% subjects)
-for (i in pred_list) {
-        predictors[[i]] <- subset(predictors[[i]], rownames(predictors[[i]]) %in% subjects)
+if (subject_subset == 'Q2') {  #ugh fix this
+    q2 <- c(subset(unrestricted_data, 
+            (Release == 'Q2' | Release == 'Q1') 
+            & ('3T_Full_MR_Compl' = TRUE))$'Subject')
+    subjects <- intersect(subjects, q2) #find intersection for qc 
+} else {
+    #this is kinda dumb but I'll get confused if it's not here. 
+    subjects <- subjects #defined by predictors up top 
     }
+ 
+cognition <- subset(cognition, rownames(cognition) %in% subjects)
+if (cog == 'PMAT24_A_CR') { 
+    cognition <- cbind(cognition, unrestricted_data['PMAT24_A_CR'])
 }
+
+for (pred in pred_list) {
+    predictors[[pred]] <- subset(predictors[[pred]], 
+                        rownames(predictors[[pred]]) %in% subjects)
+}
+
+unrestricted_data <- filter(unrestricted_data, 
+                    Subject %in% subjects)
+restricted_data <- filter(restricted_data, 
+                    Subject %in% subjects)
 
 # %%
 it_dir_name <- paste('iteration', num_it, sep='_')
 k_dir_name <- paste('k', num_k, sep='_')
-result_path <- file.path(output_dir, 'fyp_results', git_hash, subject_subset, num_k, cog, it_dir_name)
+
+result_path <- file.path(output_dir, 'fyp_results', 
+                         git_hash, subject_subset, 
+                         num_k, cog, it_dir_name)
+
 dir.create(result_path,recursive = TRUE)
 
 # %%
 #setup empty dataframes 
-cv_single_rsq_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
-colnames(cv_single_rsq_df) <- pred_list
+single_rsq_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
+colnames(single_rsq_df) <- pred_list
 
-oos_single_rsq_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
-colnames(oos_single_rsq_df) <- pred_list
-
-oos_correlation_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
-colnames(oos_single_rsq_df) <- pred_list
+single_correlation_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
+colnames(single_correlation_df) <- pred_list
 
 stacked_rsq_df <- data.frame(matrix(ncol = 1, nrow=0))
 colnames(stacked_rsq_df) <- c('stacked')
 
-full_rsq_df <- data.frame(matrix(ncol = 1, nrow=0))
-colnames(full_rsq_df) <- c('full')
+single_pred_df <- data.frame(row.names=subjects) 
 
-test_prediction_df <- data.frame(row.names=subjects) 
-final_yhat_df <- data.frame(row.names=subjects) 
+stacked_pred_df <- data.frame(row.names=subjects) 
+
 
 # %% tags=[]
 set.seed(num_it)
 folds <- groupKFold(restricted_data$Family_ID, k=num_k) #write test for this
+start_time <- Sys.time()
 
-for (num_fold in 1:length(folds)) {    
+for (num_fold in 1:length(folds)) { 
+    print(num_fold)
     indices <- CreateIndices(folds, num_curr_fold=num_fold) #fix here 
 
     train_index <- indices$train_index
     test_index <- indices$test_index 
+    train_subjects <- subjects[train_index] 
+    test_subjects <- subjects[test_index] 
 
     split_y_data <- SplitYData(cog, train_index, test_index, cognition)
 
@@ -150,73 +165,72 @@ for (num_fold in 1:length(folds)) {
         x_test_data[[pred]] <- split_x_data$'x_test'
     } 
 
-    start_time <- Sys.time()
     print('running single models')
     
     single_models <- RunSingleModels(pred_list,
                                      x_train_data, 
                                      y_train_data)
     
-    cv_single_rsq_df <- rbind(cv_single_rsq_df, single_models$rsq) 
+    single_rsq_df <- rbind(single_rsq_df, single_models$rsq) 
 
-    oos_single_rsq <- list()   
-    oos_correlation <- list()
-
-    #turn into function
+    #turn into function - PredictSingleModels
     for (pred in pred_list) { 
          curr_model <- single_models$models[pred]
-         test_prediction_df[test_index, pred] <- predict(curr_model,
-                                                         newx=x_test_data[[pred]], 
-                                                         s='lambda.1se')  
-         oos_single_rsq[pred] <- CalcRsq(test_prediction_df[test_index, pred],
-                                         y_test_data[[cog]])
-         oos_correlation[pred] <- cor(test_prediction_df[test_index, pred], 
-                                      y_test_data[[cog]]) 
-     } 
-    
-     oos_single_rsq_df <- rbind(oos_single_rsq_df, oos_single_rsq)
-     oos_correlation_df <- rbind(oos_correlation_df, oos_correlation)
-    
-    #save lambdas      
-    stacked_model = NULL
-
-    if (stacked != FALSE) { 
+         single_pred_df[test_index, pred] <- predict(curr_model,
+                                                newx=x_test_data[[pred]])  
+     }     
+    if (length(pred_list) > 1 & stacked == TRUE) { 
          
         print('running stacked models')
 
-        stacked_model <- RunStackedModel(as.matrix(single_models$predictions), 
-                                     cognition[train_index, cog])
-        stacked_rsq_df <- rbind(stacked_rsq_df, stacked_model$rsq)
-         
-        final_yhat_df[test_index,'predictions'] <- predict(stacked_model$model, 
-                                                    newdata=as.matrix(test_prediction_df[test_index,])) 
-         #double check why newy was in here
+        stacked_model <- RunStackedModel(single_models$predictions, 
+                                     cognition[train_index,cog])
+        #this is necessary so that predict doesn't throw a fit about the matrix.frame 
+        #not being the same
+        single_pred_df[test_index,'cog'] <- y_test_data
+        stacked_pred_df[test_index,'predictions'] <- predict(stacked_model$model, 
+                            newdata= single_pred_df[test_index,])
 
-        write.csv(stacked_rsq_df, file = file.path(result_path, 
-                                               'stacked_rsq.csv'))
-        full_rsq <- CalcRsq(final_yhat_df[['predictions']], cognition[[cog]])
-        
-        write.csv(full_rsq, 
-              file = file.path(result_path, 'out_of_sample_full_rsq.csv'))
-
-    } 
-    rds_name <- file.path(result_path, paste('fold', num_fold, '.RDS', sep=''))
-    save(single_models, stacked_model, num_it, indices, file = rds_name)
+    } else {stacked_model = NULL} 
+      
+    rds_name <- file.path(result_path, 
+                          paste('fold', num_fold, '.RDS', sep=''))
+    
+    save(single_models, stacked_model, num_it, subjects, 
+         num_fold, file = rds_name)
 
 }
-write.csv(final_yhat_df, 
-          file = file.path(result_path, 'final_prediction.csv'))
+    end_time <- Sys.time()
+    run_time <- (end_time - start_time)
+    print(run_time)
 
-write.csv(cv_single_rsq_df, 
-          file = file.path(result_path, 'in_sample_single_rsq.csv'))
+# %% tags=[]
+for (pred in pred_list) { 
+    
+    single_rsq[pred] <- CalcRsq(single_pred_df[pred],
+                                           cognition[[cog]])
+    correlation[pred] <- cor(single_pred_df[pred], cognition[[cog]])
 
-write.csv(oos_single_rsq_df, 
-          file = file.path(result_path, 'out_of_sample_single_rsq.csv'))
+}
 
-write.csv(oos_correlation_df, 
-          file = file.path(result_path, 'out_of_sample_correlation.csv'))
+single_correlation_df <- rbind(single_correlation_df, correlation)
 
-# %%
-oos_correlation_df
+single_rsq_df <- rbind(single_rsq_df, single_rsq)
+
+stacked_rsq <- CalcRsq(stacked_pred_df[['predictions']], cognition[[cog]])
+
+write.csv(stacked_rsq, file.path(result_path, 'stacked_rsq.csv'))
+
+write.csv(stacked_pred_df, file.path(result_path, 
+                                           'stacked_prediction.csv'))
+
+write.csv(single_pred_df, file.path(result_path, 
+                                          'stacked_prediction.csv'))
+
+write.csv(single_rsq_df, 
+          file = file.path(result_path, 'single_rsq.csv'))
+
+write.csv(single_correlation_df, 
+          file = file.path(result_path, 'correlation.csv'))
 
 # %%
