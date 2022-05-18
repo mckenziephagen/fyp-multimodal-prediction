@@ -199,7 +199,7 @@ for (num_fold in 1:length(folds)) {
     rds_name <- file.path(result_path, 
                           paste('fold', num_fold, '.RDS', sep=''))
     
-    save(single_models, stacked_model, num_it, subjects, 
+    save(single_models, git_hash, stacked_model, num_it, subjects, 
          num_fold, file = rds_name)
 
 }
@@ -207,12 +207,23 @@ for (num_fold in 1:length(folds)) {
     run_time <- (end_time - start_time)
     print(run_time)
 
+# %%
+single_rsq_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
+colnames(single_rsq_df) <- pred_list
+
+single_correlation_df <- data.frame(matrix(ncol = length(pred_list), nrow=0))
+colnames(single_correlation_df) <- pred_list
+
 # %% tags=[]
+single_rsq <- list()
+correlation <- list() 
+
 for (pred in pred_list) { 
     
     single_rsq[pred] <- CalcRsq(single_pred_df[pred],
                                            cognition[[cog]])
     correlation[pred] <- cor(single_pred_df[pred], cognition[[cog]])
+    
 
 }
 

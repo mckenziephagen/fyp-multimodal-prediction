@@ -30,22 +30,45 @@ cognitive_measures <- c('CogTotalComp_Unadj',
                         'DDisc_AUC_200', 
                         'IWRD_TOT', 
                         'VSPLOT_TC')
+cog <- 'CogTot*' 
+
 
 cog <- 'CogTotalComp_Unadj'
 
 # +
 #for (cog in cognitive_measures)  
-oos_csv_paths <- Sys.glob(file.path(result_dir, git_hash, 'full', 
-                       cog, 'it*', 'oos_rsq_df.csv'))
+
+
+corr_csvs <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
+                       cog, 'it*', 'correlation.csv'))
 
 combined_df <- data.frame()
-for (csv in oos_csv_paths) { 
+corr_csvs <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
+                       cog, 'it*', 'correlation.csv'))
+
+corr_df <- data.frame()
+for (csv in corr_df) { 
     temp_df <- read.csv(csv)
     combined_df<-rbind(combined_df, temp_df)
     }
 
-plot_df <- melt(combined_df[-1])
     
+plot_df <- reshape2::melt(corr_df[-1])
+psych::describe(corr_df)
+# +
+#for (cog in cognitive_measures)  
+rsq_csvs <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
+                       cog, 'it*', 'single_rsq.csv'))
+
+rsq_df <- data.frame()
+for (csv in rsq_csvs) { 
+    temp_df <- read.csv(csv)
+    rsq_df<-rbind(rsq_df, temp_df)
+    }
+
+plot_df <- reshape2::melt(rsq_df[-1])
+ 
+psych::describe(rsq_df)
 ggplot(data = plot_df, mapping = aes(x= ordered(variable,
                                     levels = c("connectome", "surface", 
                                                 "thickness", "volume", 
