@@ -21,66 +21,31 @@ library(psych)
 
 result_dir='/scratch/users/mphagen/fyp_results'
 
-git_hash = system("git rev-parse HEAD", intern=TRUE)
+cog <- 'CogTotalComp_Unadj' 
 
-<<<<<<< HEAD
-cog <- 'PMAT24_A_CR' 
-=======
-cognitive_measures <- c('CogTotalComp_Unadj', 
-                        'CogFluidComp_Unadj', 
-                        'CogCrystalComp_Unadj', 
-                        'SCPT_SEN', 
-                        'DDisc_AUC_200', 
-                        'IWRD_TOT', 
-                        'VSPLOT_TC')
-cog <- 'CogTot*' 
+# +
+#git_hash = system("git rev-parse HEAD", intern=TRUE)
+# -
 
->>>>>>> main
+git_hash <- '0fc58275891f2b7fb543a83bef3808412071c6cb' 
 
 k <- 5
 
 # +
 #for (cog in cognitive_measures)  
-<<<<<<< HEAD
-oos_corr_files <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
-                       cog, 'it*', 'out*correlation*.csv'))
-
 corr_df <- data.frame()
-for (csv in oos_corr_files) { 
-=======
 
 
 corr_csvs <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
                        cog, 'it*', 'correlation.csv'))
 
-combined_df <- data.frame()
-corr_csvs <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
-                       cog, 'it*', 'correlation.csv'))
 
 corr_df <- data.frame()
-for (csv in corr_df) { 
->>>>>>> main
+for (csv in corr_csvs) { 
     temp_df <- read.csv(csv)
     corr_df<-rbind(corr_df, temp_df)
     }
 
-<<<<<<< HEAD
-plot_df <- reshape2::melt(corr_df[-1])
-psych::describe(corr_df)
-# -
-
-
-
-
-# +
-#for (cog in cognitive_measures)  
-oos_cv_files <- Sys.glob(file.path(result_dir, git_hash, 'Q2', 
-                       cog, 'it*', 'out*rsq*.csv'))
-a
-rsq_df <- data.frame()
-for (csv in oos_cv_files) { 
-=======
-    
 plot_df <- reshape2::melt(corr_df[-1])
 psych::describe(corr_df)
 # +
@@ -90,7 +55,6 @@ rsq_csvs <- Sys.glob(file.path(result_dir, git_hash, 'Q2', k,
 
 rsq_df <- data.frame()
 for (csv in rsq_csvs) { 
->>>>>>> main
     temp_df <- read.csv(csv)
     rsq_df<-rbind(rsq_df, temp_df)
     }

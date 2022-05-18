@@ -13,9 +13,6 @@
 #     name: conda-env-r-env-r
 # ---
 
-# %%
-setwd('/home/groups/jyeatman/MPH_code/fyp-multimodal-prediction/r_scripts')
-
 # %% tags=[]
 source('.Rprofile')
 
