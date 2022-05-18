@@ -8,5 +8,6 @@ dependencies:
   - r-renv
   - r-base=4.0.2
   - jupytext
+  - jupyterlab-system-monitor
 prefix: /home/users/mphagen/miniconda3/envs/jupyter-env
 
