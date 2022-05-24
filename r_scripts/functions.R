@@ -45,38 +45,44 @@ CreateIndices <- function(folds, num_curr_fold) { #passing folds and num_curr_fo
 
 SplitYData <- function(cog, train_index, test_index, cognition) { 
     
-    y_train <- cognition[train_index,][cog]
-    y_test <- cognition[test_index,][cog]
+    y_train <- cognition[train_index,cog]
+    y_test <- cognition[test_index,cog]
 
     return(list("y_train" = y_train, 
                 "y_test" = y_test))
 }
 
+AssessModel <- function(y_test_predictions, y_test) { 
+    mse <- as.numeric(assess.glmnet(y_test_predictions, 
+              newy=y_test)$mse)
+    rsq <- as.numeric(1 - (mse / var(y_test)))
+    corr <- cor(y_test_predictions, y_test) 
+    return(list('rsq'=rsq, 'corr' = corr))
+    } 
 
-RunSingleModels <- function(predictors, x_train_data, y_train_data) {
+# PredictSingleModels <- function() { 
     
-    models <- list()
-    rsq_list <- list()
-    train_prediction_df <- data.frame(row.names=rownames(y_train_data))
+#     } 
+
+
+TrainSingleModels <- function(predictors, x_train_data, y_train_data) {
     
+    single_models <- list()
+    y_train_mat <- as.matrix(y_train_data)
+
     for (pred in predictors) { 
-        temp_predictions <- RunSingleChannel(as.matrix(x_train_data[[pred]]), as.matrix(y_train_data))
-        train_prediction_df[pred] <- temp_predictions[['yhattrain']] 
-        models[pred] <-  temp_predictions['model']   
-        rsq_list[pred] <- temp_predictions[['rsq']]
+        
+        single_x_train <- as.matrix(x_train_data[[pred]]) #glmnet needs matrix
+        single_models[[pred]] <- cv.glmnet(single_x_train, 
+                                           y_train_mat, family = "gaussian")
     }
     
-    return(list("models" = models, "predictions" = train_prediction_df, 
-                "train" = rownames(x_train_data[[pred]]), "rsq" = rsq_list))
+    return(single_models)
 } 
 
-RunStackedModel <- function(y_hat_train, y_train) { 
-   stacked_df <- cbind(data.frame(y_hat_train), cog = y_train) 
-   stacked_model <- lm(cog ~ ., data = stacked_df)
-   #predictions <- predict(stacked_model, newdata=data.frame(y_hat_train)) 
-   #rsq <- CalcRsq(predictions, y_train) 
-    
-   return(list("model" = stacked_model))
+TrainStackedModel <- function(train_predictions) { 
+   stacked_model <- lm(cog ~ ., data = train_predictions)
+   return(stacked_model)
 }
 
 CalcRsq <- function(y_hat, y_actual) { #write test 
@@ -89,14 +95,6 @@ CalcRsq <- function(y_hat, y_actual) { #write test
     return(1 - (sse / sst)) 
 }
 
-RunSingleChannel <- function(x_train, y_train) { 
-    
-    cv_fit <- cv.glmnet(x_train, y_train)  
-    y_hat_train <- predict(cv_fit, newx=x_train, s='lambda.1se', type = 'link')
-    rsq <- CalcRsq(y_hat_train, y_train)
-    
-   return(list("yhattrain" = y_hat_train, "model" = cv_fit, "rsq" = rsq))
-}
 
 SplitXData <- function(pred, train_index, test_index) { 
         
