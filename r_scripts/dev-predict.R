@@ -161,6 +161,7 @@ for (num_fold in 1:length(folds)) {
     
     train_single <- data.frame(y_train_data,
                                 row.names=train_subjects) 
+    
     colnames(train_single) <- 'cog'
 
     x_train_data <- list()
@@ -183,7 +184,7 @@ for (num_fold in 1:length(folds)) {
     single_perf <- list()
     for (pred in pred_list) {  
         
-         curr_model <- single_models[[pred]]
+        curr_model <- single_models[[pred]]
 
         train_single[pred] <- predict(curr_model, 
                                        newx=x_train_data[[pred]])
@@ -224,9 +225,10 @@ for (num_fold in 1:length(folds)) {
     } else {stacked_model = NULL} 
       
     rds_name <- file.path(result_path, 
-                          paste('fold', num_fold, '.RDS', sep=''))
+                          paste('fold', num_fold, '.rds', sep=''))
     
-    save(single_models, git_hash, stacked_model, num_it, subjects, 
+    save(single_models, git_hash, stacked_model, num_it, test_subjects,
+         train_subjects, single_perf, stacked_perf_df,
          num_fold, file = rds_name)
 
 }
@@ -240,8 +242,3 @@ write.csv(data.frame(stacked_perf_df), file.path(result_path, 'stacked_rsq.csv')
 
 write.csv(stacked_pred_df, file.path(result_path, 
                                            'stacked_prediction.csv'))
-
-# %%
-single_perf
-
-# %%
