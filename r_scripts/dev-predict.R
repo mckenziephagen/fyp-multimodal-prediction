@@ -227,7 +227,7 @@ for (num_fold in 1:length(folds)) {
     rds_name <- file.path(result_path, 
                           paste('fold', num_fold, '.rds', sep=''))
     
-    save(single_models, git_hash, stacked_model, num_it, test_subjects,
+    save(single_models, git_hash, stacked_model, num_it, test_subjects, test_index, train_index,
          train_subjects, single_perf, stacked_perf_df,
          num_fold, file = rds_name)
 
