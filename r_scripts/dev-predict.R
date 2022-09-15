@@ -6,11 +6,11 @@
 #       extension: .R
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.8
+#       jupytext_version: 1.13.7
 #   kernelspec:
-#     display_name: R [conda env:r-env]
+#     display_name: R [conda env:r-conda]
 #     language: R
-#     name: conda-env-r-env-r
+#     name: conda-env-r-conda-r
 # ---
 
 # %% tags=[]
@@ -113,6 +113,9 @@ restricted_data <- filter(restricted_data,
                     Subject %in% subjects)
 
 # %%
+output_dir <- 'results' 
+
+# %%
 it_dir_name <- paste('iteration', num_it, sep='_')
 k_dir_name <- paste('k', num_k, sep='_')
 
@@ -145,16 +148,13 @@ folds <- groupKFold(restricted_data$Family_ID, k=num_k) #write test for this
 start_time <- Sys.time()
 
 for (num_fold in 1:length(folds)) { 
-    print(num_fold)
-    indices <- CreateIndices(folds, num_curr_fold=num_fold) #fix here 
 
-    train_index <- indices$train_index
-    test_index <- indices$test_index 
+    sub_split <- CreateSplit(folds, num_curr_fold=num_fold) #fix here 
     
-    train_subjects <- subjects[train_index] 
-    test_subjects <- subjects[test_index] 
+    train_subjects <- sub_split$train_subjects
+    test_subjects <- sub_split$test_subject
 
-    split_y_data <- SplitYData(cog, train_index, test_index, cognition)
+    split_y_data <- SplitYData(cog, train_subjects, test_subjects, cognition)
 
     y_train_data <- split_y_data$'y_train'
     y_test_data <- split_y_data$'y_test'
@@ -168,14 +168,14 @@ for (num_fold in 1:length(folds)) {
     x_test_data <- list()
 
     for (pred in pred_list) { 
-        split_x_data <- SplitXData(pred, train_index, test_index)
+        split_x_data <- SplitXData(pred, predictors, train_subjects, test_subjects)
         x_train_data[[pred]] <- as.matrix(split_x_data$'x_train')
         x_test_data[[pred]] <- as.matrix(split_x_data$'x_test')
     } 
 
     print('running single models')
     
-    single_models <- TrainSingleModels(pred_list,
+    single_models <- TrainSingleModels(predictors,
                                      x_train_data, 
                                      y_train_data)
     
@@ -189,10 +189,10 @@ for (num_fold in 1:length(folds)) {
         train_single[pred] <- predict(curr_model, 
                                        newx=x_train_data[[pred]])
 
-        test_single[test_index, pred] <- predict(curr_model,
+        test_single[rownames(test_single) %in% test_subjects, pred] <- predict(curr_model,
                                         newx=x_test_data[[pred]])
         
-        single_perf[[pred]] <- AssessModel(test_single[test_index, pred],
+        single_perf[[pred]] <- AssessModel(test_single[rownames(test_single) %in% test_subjects, pred],
                                   y_test_data)     
         
        
@@ -214,10 +214,10 @@ for (num_fold in 1:length(folds)) {
         stacked_model <- TrainStackedModel(train_single)
      
         #add dim test_single check  
-        stacked_pred_df[test_index, 'predictions'] <- predict(stacked_model, 
-                            newdata=test_single[test_index,])
+        stacked_pred_df[rownames(test_single) %in% test_subjects, 'predictions'] <- predict(stacked_model, 
+                            newdata=test_single[rownames(test_single) %in% test_subjects,])
         
-        stacked_perf <- AssessModel(stacked_pred_df[test_index, 'predictions'], 
+        stacked_perf <- AssessModel(stacked_pred_df[rownames(test_single) %in% test_subjects, 'predictions'], 
                                    y_test_data)
         
         stacked_perf_df <- rbind(stacked_perf_df, stacked_perf)
@@ -227,7 +227,7 @@ for (num_fold in 1:length(folds)) {
     rds_name <- file.path(result_path, 
                           paste('fold', num_fold, '.rds', sep=''))
     
-    save(single_models, git_hash, stacked_model, num_it, test_subjects, test_index, train_index,
+    save(single_models, git_hash, stacked_model, num_it, test_subjects,
          train_subjects, single_perf, stacked_perf_df,
          num_fold, file = rds_name)
 
@@ -242,3 +242,39 @@ write.csv(data.frame(stacked_perf_df), file.path(result_path, 'stacked_rsq.csv')
 
 write.csv(stacked_pred_df, file.path(result_path, 
                                            'stacked_prediction.csv'))
+
+# %%
+for (pred in pred_list) { 
+    
+    single_rsq[pred] <- CalcRsq(single_pred_df[pred],
+                                           cognition[[cog]])
+    correlation[pred] <- cor(single_pred_df[pred], cognition[[cog]])
+
+}
+
+single_correlation_df <- rbind(single_correlation_df, correlation)
+
+single_rsq_df <- rbind(single_rsq_df, single_rsq)
+
+stacked_rsq <- CalcRsq(stacked_pred_df[['predictions']], cognition[[cog]])
+
+write.csv(stacked_rsq, file.path(result_path, 'stacked_rsq.csv'))
+
+write.csv(stacked_pred_df, file.path(result_path, 
+                                           'stacked_prediction.csv'))
+
+write.csv(single_pred_df, file.path(result_path, 
+                                          'stacked_prediction.csv'))
+
+write.csv(single_rsq_df, 
+          file = file.path(result_path, 'single_rsq.csv'))
+
+write.csv(single_correlation_df, 
+          file = file.path(result_path, 'correlation.csv'))
+
+# %%
+
+# %%
+single_perf
+
+# %%
